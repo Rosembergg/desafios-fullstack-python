@@ -50,12 +50,18 @@ app = FastAPI(
 )
 
 
-def _salvar_resultado(identificador: str, payload: dict) -> None:
-    """Persiste o JSON da consulta em output/, no formato usado pela Parte 2 (Hiperautomação)."""
+def _salvar_resultado(identificador: str, payload: dict) -> str:
+    """Persiste o JSON da consulta em output/, no formato usado pela Parte 2 (Hiperautomação).
+
+    Retorna o nome do arquivo gerado, para a API devolver pronto na resposta
+    (evita que o workflow de hiperautomação precise remontar essa string).
+    """
     OUTPUT_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    caminho = OUTPUT_DIR / f"{identificador}_{timestamp}.json"
+    nome_arquivo = f"{identificador}_{timestamp}.json"
+    caminho = OUTPUT_DIR / nome_arquivo
     caminho.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return nome_arquivo
 
 
 @app.post("/consulta", response_model=ResultadoConsulta)
@@ -85,8 +91,8 @@ async def consultar(request: ConsultaRequest):
                 mensagem = f"Foram encontrados 0 resultados para o termo {termo!r}."
             logger.warning("Consulta %s: %s", identificador, mensagem)
             resultado = ResultadoErro(identificador=identificador, mensagem=mensagem)
-            _salvar_resultado(identificador, resultado.model_dump())
-            return ResultadoConsulta(resultado=resultado)
+            nome_arquivo = _salvar_resultado(identificador, resultado.model_dump())
+            return ResultadoConsulta(resultado=resultado, arquivo_json=nome_arquivo)
 
         encontrou = await acessar_primeiro_resultado(page)
         if not encontrou:
@@ -94,8 +100,8 @@ async def consultar(request: ConsultaRequest):
                 identificador=identificador,
                 mensagem="Não foi possível acessar os detalhes do resultado encontrado.",
             )
-            _salvar_resultado(identificador, resultado.model_dump())
-            return ResultadoConsulta(resultado=resultado)
+            nome_arquivo = _salvar_resultado(identificador, resultado.model_dump())
+            return ResultadoConsulta(resultado=resultado, arquivo_json=nome_arquivo)
 
         panorama = await extrair_panorama(page)
         beneficios_dados = await extrair_beneficios(page)
@@ -109,8 +115,8 @@ async def consultar(request: ConsultaRequest):
             screenshot_base64=evidencia,
         )
         logger.info("Consulta %s concluída com sucesso.", identificador)
-        _salvar_resultado(identificador, resultado.model_dump())
-        return ResultadoConsulta(resultado=resultado)
+        nome_arquivo = _salvar_resultado(identificador, resultado.model_dump())
+        return ResultadoConsulta(resultado=resultado, arquivo_json=nome_arquivo)
 
     except Exception as exc:
         logger.error("Consulta %s: erro inesperado — %s", identificador, exc, exc_info=True)
@@ -118,8 +124,8 @@ async def consultar(request: ConsultaRequest):
             identificador=identificador,
             mensagem=f"Não foi possível retornar os dados no tempo de resposta solicitado. Erro: {str(exc)}",
         )
-        _salvar_resultado(identificador, resultado.model_dump())
-        return ResultadoConsulta(resultado=resultado)
+        nome_arquivo = _salvar_resultado(identificador, resultado.model_dump())
+        return ResultadoConsulta(resultado=resultado, arquivo_json=nome_arquivo)
     finally:
         if page:
             await page.close()

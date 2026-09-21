@@ -42,3 +42,7 @@ class ResultadoErro(BaseModel):
 
 class ResultadoConsulta(BaseModel):
     resultado: ResultadoSucesso | ResultadoErro
+    arquivo_json: Optional[str] = Field(
+        None,
+        description="Nome do arquivo JSON salvo em output/, no formato [IDENTIFICADOR]_[DATA_HORA].json",
+    )
